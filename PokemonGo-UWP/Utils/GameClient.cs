@@ -30,7 +30,6 @@ using Template10.Common;
 using Template10.Utils;
 using Universal_Authenticator_v2.Views;
 using Windows.Devices.Sensors;
-using PokemonGo.RocketAPI.Rpc;
 using PokemonGo_UWP.Utils.Helpers;
 
 namespace PokemonGo_UWP.Utils
@@ -53,6 +52,7 @@ namespace PokemonGo_UWP.Utils
             private const int MaxRetries = 50;
 
             private int _retryCount;
+
 
             public async Task<ApiOperation> HandleApiFailure(RequestEnvelope request, ResponseEnvelope response)
             {
@@ -78,98 +78,6 @@ namespace PokemonGo_UWP.Utils
             }
         }
 
-        /// <summary>
-        /// Handles map updates using Niantic's logic.
-        /// Ported from <seealso cref="https://github.com/AeonLucid/POGOLib"/>
-        /// </summary>
-        internal class Heartbeat
-        {
-            /// <summary>
-            ///     Determines whether we can keep heartbeating.
-            /// </summary>
-            private bool _keepHeartbeating = true;
-
-            /// <summary>
-            /// Timer used to update map
-            /// </summary>
-            private DispatcherTimer _mapUpdateTimer;
-
-            /// <summary>
-            /// Checks if we need to update data
-            /// </summary>
-            /// <param name="sender"></param>
-            /// <param name="o"></param>
-            private async void HeartbeatTick(object sender, object o)
-            {
-                // We need to skip this iteration
-                if (!_keepHeartbeating) return;
-                // Heartbeat is alive so we check if we need to update data, based on GameSettings
-                var canRefresh = false;
-                // We have no settings yet so we just update without further checks
-                if (GameSetting == null)
-                {
-                    canRefresh = true;
-                }
-                else
-                {
-                    // Check if we need to update                
-                    var minSeconds = GameSetting.MapSettings.GetMapObjectsMinRefreshSeconds;
-                    var maxSeconds = GameSetting.MapSettings.GetMapObjectsMaxRefreshSeconds;
-                    var minDistance = GameSetting.MapSettings.GetMapObjectsMinDistanceMeters;
-                    var lastGeoCoordinate = LastGeopositionMapObjectsRequest;
-                    var secondsSinceLast = DateTime.UtcNow.Subtract(BaseRpc.LastRpcRequest).Seconds;
-                    if (lastGeoCoordinate == null)
-                    {
-                        Logger.Write("Refreshing MapObjects, reason: 'lastGeoCoordinate == null'.");
-                        canRefresh = true;
-                    }
-                    else if (secondsSinceLast >= minSeconds)
-                    {
-                        var metersMoved = GeoHelper.Distance(Geoposition.Coordinate.Point, lastGeoCoordinate.Coordinate.Point);
-                        if (secondsSinceLast >= maxSeconds)
-                        {
-                            Logger.Write($"Refreshing MapObjects, reason: 'secondsSinceLast({secondsSinceLast}) >= maxSeconds({maxSeconds})'.");
-                            canRefresh = true;
-                        }
-                        else if (metersMoved >= minDistance)
-                        {
-                            Logger.Write($"Refreshing MapObjects, reason: 'metersMoved({metersMoved}) >= minDistance({minDistance})'.");
-                            canRefresh = true;
-                        }
-                    }
-                } 
-                // Update!
-                if (!canRefresh) return;
-                try
-                {
-                    await UpdateMapObjects();
-                }
-                catch (Exception ex)
-                {
-                    await ExceptionHandler.HandleException(ex);
-                }
-            }
-
-            /// <summary>
-            /// Inits heartbeat
-            /// </summary>
-            internal void StartDispatcher()
-            {
-                _keepHeartbeating = true;
-                if (_mapUpdateTimer != null) return;
-                _mapUpdateTimer = new DispatcherTimer {Interval = TimeSpan.FromSeconds(1)};
-                _mapUpdateTimer.Tick += HeartbeatTick;
-                _mapUpdateTimer.Start();
-            }            
-
-            /// <summary>
-            /// Stops heartbeat
-            /// </summary>
-            internal void StopDispatcher()
-            {
-                _keepHeartbeating = false;
-            }
-        }
         #endregion
 
         #region Game Vars
@@ -424,18 +332,24 @@ namespace PokemonGo_UWP.Utils
         /// <summary>
         ///     Logs the user out by clearing data and timers
         /// </summary>
-        public static void DoLogout()
+        public static async void DoLogout()
         {
-            // Clear stored token
-            SettingsService.Instance.AuthToken = null;
-            if (!SettingsService.Instance.RememberLoginData)
-                SettingsService.Instance.UserCredentials = null;
-            _heartbeat.StopDispatcher();
-            _geolocator.PositionChanged -= GeolocatorOnPositionChanged;
-            _geolocator = null;
-            CatchablePokemons.Clear();
-            NearbyPokemons.Clear();
-            NearbyPokestops.Clear();
+            //_mapUpdateTimer is dispatcher timer and we are called from another threads, so run it in dispatcher
+            await DispatcherHelper.RunInDispatcherAndAwait(() =>
+           {
+               // Clear stored token
+               SettingsService.Instance.AuthToken = null;
+               if (!SettingsService.Instance.RememberLoginData)
+                   SettingsService.Instance.UserCredentials = null;
+               _mapUpdateTimer?.Stop();
+               _mapUpdateTimer = null;
+               _geolocator.PositionChanged -= GeolocatorOnPositionChanged;
+               _geolocator = null;
+               CatchablePokemons.Clear();
+               NearbyPokemons.Clear();
+               NearbyPokestops.Clear();
+           });
+
         }
 
         public static async Task DoRelogin()
@@ -459,7 +373,7 @@ namespace PokemonGo_UWP.Utils
             await UpdatePlayerStats();
             Debug.WriteLine("[Relogin] Restarting MapUpdate timer.");
             _lastUpdate = DateTime.Now;
-            ToggleUpdateTimer();
+            await ToggleUpdateTimer();
         }
 
         #endregion
@@ -473,7 +387,7 @@ namespace PokemonGo_UWP.Utils
 
         public static double Heading { get; private set; }
 
-        private static Heartbeat _heartbeat;
+        private static DispatcherTimer _mapUpdateTimer;
         private static DispatcherTimer _compassTimer;
 
         /// <summary>
@@ -489,19 +403,19 @@ namespace PokemonGo_UWP.Utils
         public static async Task InitializeDataUpdate()
         {
             _compass = Compass.GetDefault();
-            _compassTimer = new DispatcherTimer
-            {
-                Interval = TimeSpan.FromMilliseconds(Math.Max(_compass.MinimumReportInterval, 50))
-            };
-            _compassTimer.Tick += (s, e) =>
-            {
-                if (SettingsService.Instance.IsAutoRotateMapEnabled)
-                {
-                    HeadingUpdated?.Invoke(null, _compass.GetCurrentReading());
-                }
-            };
             if (_compass != null)
             {
+                _compassTimer = new DispatcherTimer
+                {
+                    Interval = TimeSpan.FromMilliseconds(Math.Max(_compass.MinimumReportInterval, 50))
+                };
+                _compassTimer.Tick += (s, e) =>
+                {
+                    if (SettingsService.Instance.IsAutoRotateMapEnabled)
+                    {
+                        HeadingUpdated?.Invoke(null, _compass.GetCurrentReading());
+                    }
+                };
                 _compassTimer.Start();
             }
             _geolocator = new Geolocator
@@ -523,11 +437,29 @@ namespace PokemonGo_UWP.Utils
                         DateTime.Now.AddMonths(1));
             // Update geolocator settings based on server
             _geolocator.MovementThreshold = GameSetting.MapSettings.GetMapObjectsMinDistanceMeters;
-            _heartbeat = new Heartbeat();
-            _heartbeat.StartDispatcher();
+            _mapUpdateTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromSeconds(GameSetting.MapSettings.GetMapObjectsMinRefreshSeconds)
+            };
+            _mapUpdateTimer.Tick += async (s, e) =>
+            {
+                // Update before starting but only if more than 10s passed since the last one
+                if ((DateTime.Now - _lastUpdate).Seconds <= GameSetting.MapSettings.GetMapObjectsMinRefreshSeconds)
+                    return;
+                Logger.Write("Updating map");
+
+                try
+                {
+                    await UpdateMapObjects();
+                }
+                catch (Exception ex)
+                {
+                    await ExceptionHandler.HandleException(ex);
+                }
+            };
             // Update before starting timer
             Busy.SetBusy(true, Resources.CodeResources.GetString("GettingUserDataText"));
-            //await UpdateMapObjects();
+            await UpdateMapObjects();
             await UpdateInventory();
             await UpdateItemTemplates();
             Busy.SetBusy(false);
@@ -552,13 +484,19 @@ namespace PokemonGo_UWP.Utils
         ///     Toggles the update timer based on the isEnabled value
         /// </summary>
         /// <param name="isEnabled"></param>
-        public static void ToggleUpdateTimer(bool isEnabled = true)
+        public static async Task ToggleUpdateTimer(bool isEnabled = true)
         {
             if (isEnabled)
-                _heartbeat.StartDispatcher();
+            {
+                if (_mapUpdateTimer.IsEnabled) return;
+                // Update before starting but only if more than 10s passed since the last one
+                if ((DateTime.Now - _lastUpdate).Seconds > GameSetting.MapSettings.GetMapObjectsMinRefreshSeconds)
+                    await UpdateMapObjects();
+                _mapUpdateTimer.Start();
+            }
             else
             {
-                _heartbeat.StopDispatcher();
+                _mapUpdateTimer.Stop();
             }
         }
 
@@ -600,9 +538,6 @@ namespace PokemonGo_UWP.Utils
 
         #region Map & Position
 
-        internal static Geoposition LastGeopositionMapObjectsRequest;
-        internal static DateTime LastRpcMapObjectsRequest;
-
         /// <summary>
         ///     Gets updated map data based on provided position
         /// </summary>
@@ -615,8 +550,6 @@ namespace PokemonGo_UWP.Utils
                         <GetMapObjectsResponse, GetHatchedEggsResponse, GetInventoryResponse, CheckAwardedBadgesResponse,
                             DownloadSettingsResponse>> GetMapObjects(Geoposition geoposition)
         {
-            LastGeopositionMapObjectsRequest = geoposition;            
-            LastRpcMapObjectsRequest = DateTime.Now;
             return await _client.Map.GetMapObjects();
         }
 
