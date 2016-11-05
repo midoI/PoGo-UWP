@@ -158,7 +158,7 @@ namespace PokemonGo.RocketAPI.Helpers
                 RequestType = 6,
                 Unknown2 = new Unknown6.Types.Unknown2
                 {
-                     EncryptedSignature = ByteString.CopyFrom(Crypt.Encrypt(sig.ToByteArray()))
+                     EncryptedSignature = ByteString.CopyFrom(PCrypt.encrypt(sig.ToByteArray(), (uint)_deviceInfo.TimeSnapshot))
                 }
             };
 

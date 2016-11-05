@@ -24,9 +24,9 @@ namespace PokemonGo_UWP.Utils
 
     public class VersionData : IVersionData
     {
-        public ulong HashSeed1 => VersionInfo.Instance.seed1;
+        public uint HashSeed1 => 0x61247FBF; // temporary here VersionInfo.Instance.seed1;
 
-        public long VersionHash => VersionInfo.Instance.unknown25;
+        public long VersionHash => -8408506833887075802; // VersionInfo.Instance.unknown25;
 
         public int Version => VersionInfo.Instance.version_number;
     }
