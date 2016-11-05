@@ -153,7 +153,7 @@ namespace PokemonGo_UWP.Utils
             public double AccelRawZ => _accelerometer?.GetCurrentReading()?.AccelerationZ ?? _random.NextGaussian(0.0, 0.3);
 
 
-            public ulong AccelerometerAxes => 3;
+            public int AccelerometerAxes => 3;
 
         }
 
@@ -200,7 +200,7 @@ namespace PokemonGo_UWP.Utils
                 // TODO: why 1? need more infos.
                 loc.LocationType = 1;
 
-                loc.TimeSnapshot = DeviceInfos.RelativeTimeFromStart;
+                loc.TimeSnapshot = (ulong)DeviceInfos.RelativeTimeFromStart;
 
                 loc.HorizontalAccuracy = (float?)LocationServiceHelper.Instance.Geoposition.Coordinate?.SatelliteData.HorizontalDilutionOfPrecision ?? (float)Math.Floor((float)_random.NextGaussian(1.0, 1.0)); //better would be exp distribution
 																																																																																																								 // @robertmclaws: VericalAccuracy is not currently transmitted in the payload. 
@@ -223,7 +223,7 @@ namespace PokemonGo_UWP.Utils
 
             public ulong LocationType { get; private set; }
 
-            public long TimeSnapshot { get; private set; }
+            public ulong TimeSnapshot { get; private set; }
             public float HorizontalAccuracy { get; private set; }
             public float VerticalAccuracy { get; private set; }
             public float Course { get; private set; }

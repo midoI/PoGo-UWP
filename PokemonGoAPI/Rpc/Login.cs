@@ -1,4 +1,5 @@
 ﻿using Google.Protobuf;
+using POGOProtos.Networking.Envelopes;
 using POGOProtos.Networking.Requests;
 using POGOProtos.Networking.Requests.Messages;
 using PokemonGo.RocketAPI.Enums;
@@ -76,7 +77,8 @@ namespace PokemonGo.RocketAPI.Rpc
 
             Client.AccessToken.AuthTicket = serverResponse.AuthTicket;
 
-            if (serverResponse.StatusCode == (int)StatusCode.Redirect)
+            if (serverResponse.StatusCode == ResponseEnvelope.Types.StatusCode.Redirect
+                || serverResponse.StatusCode == ResponseEnvelope.Types.StatusCode.InvalidRequest /*Delete this*/)
             {
                 Client.ApiUrl = serverResponse.ApiUrl;
             }

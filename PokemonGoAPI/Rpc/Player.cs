@@ -38,7 +38,7 @@ namespace PokemonGo.RocketAPI.Rpc
         {
             Client.CurrentLatitude = lat;
             Client.CurrentLongitude = lng;
-            Client.CurrentAccuracy = accuracy;
+            Client.CurrentAccuracy = (int)accuracy;
         }
 
         public async Task<GetPlayerResponse> GetPlayer()

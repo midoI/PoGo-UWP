@@ -11,7 +11,7 @@ namespace PokemonGo.RocketAPI.Helpers
 {
     public class RequestBuilder
     {
-        private readonly double _accuracy;
+        private readonly int _accuracy;
         private readonly AuthTicket _authTicket;
         private readonly string _authToken;
         private readonly AuthType _authType;
@@ -21,7 +21,7 @@ namespace PokemonGo.RocketAPI.Helpers
         private readonly Random _random = new Random();
         private static byte[] _sessionHash = null;
 
-        public RequestBuilder(string authToken, AuthType authType, double latitude, double longitude, double accuracy,
+        public RequestBuilder(string authToken, AuthType authType, double latitude, double longitude, int accuracy,
             IDeviceInfo deviceInfo,
             AuthTicket authTicket = null)
         {
@@ -52,36 +52,17 @@ namespace PokemonGo.RocketAPI.Helpers
 
             var sig = new Signature
             {
-                LocationHash1 =
+                LocationHash1 = (int)
                     Utils.GenerateLocation1(authSeed, requestEnvelope.Latitude, requestEnvelope.Longitude,
                         requestEnvelope.Accuracy, _deviceInfo.VersionData.HashSeed1),
-                LocationHash2 =
+                LocationHash2 = (int)
                     Utils.GenerateLocation2(requestEnvelope.Latitude, requestEnvelope.Longitude,
                         requestEnvelope.Accuracy, _deviceInfo.VersionData.HashSeed1),
                 SessionHash = ByteString.CopyFrom(_sessionHash),
                 Unknown25 = _deviceInfo.VersionData.VersionHash,
                 Timestamp = (ulong)DateTime.UtcNow.ToUnixTime(),
                 TimestampSinceStart = (ulong)_deviceInfo.TimeSnapshot,
-                SensorInfo = new Signature.Types.SensorInfo
-                {
-                    AccelNormalizedX = normAccel.X,
-                    AccelNormalizedY = normAccel.Y,
-                    AccelNormalizedZ = normAccel.Z,
-                    AccelRawX = -_deviceInfo.Sensors.AccelRawX,
-                    AccelRawY = -_deviceInfo.Sensors.AccelRawY,
-                    AccelRawZ = -_deviceInfo.Sensors.AccelRawZ,
-                    MagnetometerX = _deviceInfo.Sensors.MagnetometerX,
-                    MagnetometerY = _deviceInfo.Sensors.MagnetometerY,
-                    MagnetometerZ = _deviceInfo.Sensors.MagnetometerZ,
-                    GyroscopeRawX = _deviceInfo.Sensors.GyroscopeRawX,
-                    GyroscopeRawY = _deviceInfo.Sensors.GyroscopeRawY,
-                    GyroscopeRawZ = _deviceInfo.Sensors.GyroscopeRawZ,
-                    AngleNormalizedX = _deviceInfo.Sensors.AngleNormalizedX,
-                    AngleNormalizedY = _deviceInfo.Sensors.AngleNormalizedY,
-                    AngleNormalizedZ = _deviceInfo.Sensors.AngleNormalizedZ,
-                    AccelerometerAxes = _deviceInfo.Sensors.AccelerometerAxes,
-                    TimestampSnapshot = (ulong)(_deviceInfo.Sensors.TimeSnapshot - _random.Next(150, 260))
-                },
+
                 DeviceInfo = new Signature.Types.DeviceInfo
                 {
                     DeviceId = _deviceInfo.DeviceID,
@@ -114,18 +95,21 @@ namespace PokemonGo.RocketAPI.Helpers
 
             if(_deviceInfo.GpsSattelitesInfo.Length > 0)
             {
-                sig.GpsInfo = new Signature.Types.AndroidGpsInfo();
                 //sig.GpsInfo.TimeToFix //currently not filled
 
                 _deviceInfo.GpsSattelitesInfo.ToList().ForEach(sat =>
                 {
-                    sig.GpsInfo.Azimuth.Add(sat.Azimuth);
-                    sig.GpsInfo.Elevation.Add(sat.Elevation);
-                    sig.GpsInfo.HasAlmanac.Add(sat.Almanac);
-                    sig.GpsInfo.HasEphemeris.Add(sat.Emphasis);
-                    sig.GpsInfo.SatellitesPrn.Add(sat.SattelitesPrn);
-                    sig.GpsInfo.Snr.Add(sat.Snr);
-                    sig.GpsInfo.UsedInFix.Add(sat.UsedInFix);
+                    Signature.Types.AndroidGpsInfo gpsInfo = new Signature.Types.AndroidGpsInfo();
+
+                    gpsInfo.Azimuth.Add(sat.Azimuth);
+                    gpsInfo.Elevation.Add(sat.Elevation);
+                    gpsInfo.HasAlmanac.Add(sat.Almanac);
+                    gpsInfo.HasEphemeris.Add(sat.Emphasis);
+                    gpsInfo.SatellitesPrn.Add(sat.SattelitesPrn);
+                    gpsInfo.Snr.Add(sat.Snr);
+                    gpsInfo.UsedInFix.Add(sat.UsedInFix);
+
+                    sig.GpsInfo.Add(gpsInfo);
                 });
             }
 
@@ -153,14 +137,36 @@ namespace PokemonGo.RocketAPI.Helpers
                     );
             }
 
-            requestEnvelope.Unknown6 = new Unknown6
+
+            Signature.Types.SensorInfo sensorInfo = new Signature.Types.SensorInfo()
             {
-                RequestType = 6,
-                Unknown2 = new Unknown6.Types.Unknown2
-                {
-                     EncryptedSignature = ByteString.CopyFrom(PCrypt.encrypt(sig.ToByteArray(), (uint)_deviceInfo.TimeSnapshot))
-                }
+                MagneticFieldX = normAccel.X,
+                MagneticFieldY = normAccel.Y,
+                MagneticFieldZ = normAccel.Z,
+                RotationRateX = -_deviceInfo.Sensors.AccelRawX,
+                RotationRateY = -_deviceInfo.Sensors.AccelRawY,
+                RotationRateZ = -_deviceInfo.Sensors.AccelRawZ,
+                LinearAccelerationX = _deviceInfo.Sensors.MagnetometerX,
+                LinearAccelerationY = _deviceInfo.Sensors.MagnetometerY,
+                LinearAccelerationZ = _deviceInfo.Sensors.MagnetometerZ,
+                AttitudePitch = _deviceInfo.Sensors.GyroscopeRawX,
+                AttitudeRoll = _deviceInfo.Sensors.GyroscopeRawY,
+                AttitudeYaw = _deviceInfo.Sensors.GyroscopeRawZ,
+                GravityX = _deviceInfo.Sensors.AngleNormalizedX,
+                GravityY = _deviceInfo.Sensors.AngleNormalizedY,
+                GravityZ = _deviceInfo.Sensors.AngleNormalizedZ,
+                Status = _deviceInfo.Sensors.AccelerometerAxes,
+                MagneticFieldAccuracy = 10,
+                TimestampSnapshot = (ulong)(_deviceInfo.Sensors.TimeSnapshot - _random.Next(150, 260))
             };
+
+            sig.SensorInfo.Add(sensorInfo);
+
+            requestEnvelope.PlatformRequests.Add(new PlatformRequest()
+            {
+                Type = POGOProtos.Networking.Platform.PlatformRequestType.SendEncryptedSignature,
+                RequestMessage = ByteString.CopyFrom(PCrypt.encrypt(sig.ToByteArray(), (uint)_deviceInfo.TimeSnapshot))
+            });
 
             return requestEnvelope;
         }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 
 class NiaHash
 {
@@ -25,21 +26,25 @@ class NiaHash
     public static ulong compute_hash64(byte[] input, UInt32 seed)
     {
         byte[] inputWithSeed = new byte[input.Length + 4];
-        Array.Copy(BitConverter.GetBytes(seed), inputWithSeed, 4);
+        byte[] seedArr = BitConverter.GetBytes(seed).Reverse().ToArray();
+        Array.Copy(seedArr, inputWithSeed, 4);
         Array.Copy(input, 0, inputWithSeed, 4, input.Length);
         return compute_hash(inputWithSeed);
     }
     public static uint compute_hash32(byte[] input, UInt32 seed)
     {
         byte[] inputWithSeed = new byte[input.Length + 4];
-        Array.Copy(BitConverter.GetBytes(seed), inputWithSeed, 4);
+        byte[] seedArr = BitConverter.GetBytes(seed).Reverse().ToArray();
+        Array.Copy(seedArr, inputWithSeed, 4);
         Array.Copy(input, 0, inputWithSeed, 4, input.Length);
-        return (uint)compute_hash(inputWithSeed);
+        ulong hash = compute_hash(inputWithSeed);
+        return ((uint)hash)^ ((uint)(hash>>32)) ;
     }
     public static ulong compute_hash64(byte[] input, UInt64 seed)
     {
         byte[] inputWithSeed = new byte[input.Length + 8];
-        Array.Copy(BitConverter.GetBytes(seed), inputWithSeed, 8);
+        byte[] seedArr = BitConverter.GetBytes(seed).Reverse().ToArray();
+        Array.Copy(seedArr, inputWithSeed, 8);
         Array.Copy(input, 0, inputWithSeed, 8, input.Length);
         return compute_hash(inputWithSeed);
     }

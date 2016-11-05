@@ -11,7 +11,7 @@ namespace PokemonGo.RocketAPI.Helpers
         uint Floor { get; }
         ulong LocationType { get; }
         ulong ProviderStatus { get; }
-        long TimeSnapshot { get; }
+        ulong TimeSnapshot { get; }
         float HorizontalAccuracy { get; }
         float VerticalAccuracy { get; }
         float Course { get; }
@@ -32,7 +32,7 @@ namespace PokemonGo.RocketAPI.Helpers
     {
 
         long TimeSnapshot { get; }
-        ulong AccelerometerAxes { get; }
+        int AccelerometerAxes { get; }
         double AccelRawX { get; }
         double AccelRawY { get; }
         double AccelRawZ { get; }
